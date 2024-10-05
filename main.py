@@ -5,6 +5,5 @@ from server import ServerApp
 
 if __name__ == "__main__":
     config = Config(os.getenv("ENV", "dev"))
-
     serverApp = ServerApp(config)
     serverApp.run()

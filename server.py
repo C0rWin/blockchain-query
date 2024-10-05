@@ -8,6 +8,7 @@ from bitcoin_info import TransactionService as transaction_service
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from flask.views import MethodView
+from flask_limiter import Limiter
 
 
 class ServerApp:
@@ -30,6 +31,7 @@ class ServerApp:
         """
         self._config = config
         self._app = Flask(config["app"]["name"])
+        self._limiter = Limiter(app=self._app, key_func=lambda: request.remote_addr)
         self._register_routes()
         self._register_error_handlers()
 
@@ -37,12 +39,14 @@ class ServerApp:
         """
         Register the routes for the Flask application.
         """
-        addressView = address_service.as_view("address", self._config)
+        addressView = address_service.as_view("address", self._config, self._limiter)
         self._app.add_url_rule(
             "/address/<string:address>", view_func=addressView, methods=["GET"]
         )
 
-        transactionView = transaction_service.as_view("transaction", self._config)
+        transactionView = transaction_service.as_view(
+            "transaction", self._config, self._limiter
+        )
         self._app.add_url_rule(
             "/transaction/<string:txhash>",
             view_func=transactionView,

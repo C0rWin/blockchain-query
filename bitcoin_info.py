@@ -3,8 +3,21 @@ import requests
 
 from requests.exceptions import RequestException
 from flask.views import MethodView
-from werkzeug.exceptions import BadRequest, NotFound, InternalServerError
+from flask_limiter import Limiter
+from werkzeug.exceptions import BadRequest, NotFound, InternalServerError, HTTPException
 from functools import wraps
+
+
+class TooManyRequests(HTTPException):
+    """*429* `Too Many Request`
+
+    The server is limiting the rate at which the client can send requests.
+    """
+
+    code = 429
+    description = (
+        "The server is limiting the rate at which the client can send requests."
+    )
 
 
 def handle_response(f):
@@ -26,10 +39,26 @@ def handle_response(f):
     return decorated_function
 
 
+def rate_limit(limit_string):
+    def decorator(f):
+        @wraps(f)
+        def decorated_function(self, *args, **kwargs):
+            limiter = getattr(self, "_limiter", None)
+            if limiter:
+                limited = limiter.limit(limit_string)(f)
+                return limited(self, *args, **kwargs)
+            return f(*args, **kwargs)
+
+        return decorated_function
+
+    return decorator
+
+
 class Service(MethodView):
-    def __init__(self, config: config.Config):
+    def __init__(self, config: config.Config, limiter: Limiter):
         self._endpoint = config["api"]["endpoint"]
         self._timeout = config["api"]["timeout"]
+        self._limiter = limiter
 
     @handle_response
     def retrieve(self, url):
@@ -44,9 +73,10 @@ class AddressService(Service):
     https://blockchain.info API, to retrieve information about Bitcoin addresses.
     """
 
-    def __init__(self, config: config.Config):
-        super().__init__(config)
+    def __init__(self, config: config.Config, limiter: Limiter):
+        super().__init__(config, limiter)
 
+    @rate_limit("10 per minute")
     def get(self, address: str) -> dict:
         """
         Get address details for the given address.
@@ -87,9 +117,10 @@ class TransactionService(Service):
     https://blockchain.info API, to retrieve information about Bitcoin transactions.
     """
 
-    def __init__(self, config: config.Config):
-        super().__init__(config)
+    def __init__(self, config: config.Config, limiter: Limiter):
+        super().__init__(config, limiter)
 
+    @rate_limit("5 per minute")
     def get(self, txhash: str) -> dict:
         """
         Get transaction details for the given transaction hash.
