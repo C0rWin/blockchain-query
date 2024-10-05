@@ -6,10 +6,11 @@ from bitcoin_info import AddressService as address_service
 from bitcoin_info import TransactionService as transaction_service
 from db.database import CacheManager
 
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, g
 from flask_cors import CORS
 from flask.views import MethodView
 from flask_limiter import Limiter
+from time import strftime
 
 
 class ServerApp:
@@ -39,7 +40,28 @@ class ServerApp:
         self._register_routes()
         self._register_error_handlers()
 
+    def _log_request(self):
+        self._app.logger.info(
+            f'{request.remote_addr} - - [{strftime("%d/%b/%Y %H:%M:%S")}] '
+            f'"{request.method} {request.full_path} {request.scheme.upper()}" '
+            f"{request.user_agent}"
+        )
+
     def _register_routes(self):
+        @self._app.before_request
+        def before_request():
+            g.start = strftime("[%d/%b/%Y %H:%M:%S]")
+            self._log_request()
+
+        @self._app.after_request
+        def after_request(response):
+            diff = strftime("[%d/%b/%Y %H:%M:%S]")
+            self._app.logger.info(
+                f"{g.start} {diff} {request.remote_addr} {request.method} "
+                f"{request.full_path} {response.status}"
+            )
+            return response
+
         """
         Register the routes for the Flask application.
         """
