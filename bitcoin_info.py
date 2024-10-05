@@ -1,6 +1,8 @@
 import config
 import requests
 
+from db.database import CacheManager
+
 from requests.exceptions import RequestException
 from flask.views import MethodView
 from flask_limiter import Limiter
@@ -73,8 +75,9 @@ class AddressService(Service):
     https://blockchain.info API, to retrieve information about Bitcoin addresses.
     """
 
-    def __init__(self, config: config.Config, limiter: Limiter):
+    def __init__(self, config: config.Config, cache: CacheManager, limiter: Limiter):
         super().__init__(config, limiter)
+        self._cache = cache
 
     @rate_limit("10 per minute")
     def get(self, address: str) -> dict:
@@ -95,6 +98,10 @@ class AddressService(Service):
         if not address:
             raise BadRequest("Missing address parameter")
 
+        address_result = self._cache.get(address, "address")
+        if address_result:
+            return address_result
+
         url = f"{self._endpoint}/rawaddr/{address}"
         print(f"Sending request to {url}")
         data = self.retrieve(url)
@@ -104,11 +111,13 @@ class AddressService(Service):
 
         transaction_count = data["n_tx"]
         balance = data["final_balance"]
-        return {
+        address_result = {
             "address": address,
             "balance": data["final_balance"],
             "transaction_count": data["n_tx"],
         }
+        self._cache.put(address, address_result, "address")
+        return address_result
 
 
 class TransactionService(Service):
@@ -117,8 +126,9 @@ class TransactionService(Service):
     https://blockchain.info API, to retrieve information about Bitcoin transactions.
     """
 
-    def __init__(self, config: config.Config, limiter: Limiter):
+    def __init__(self, config: config.Config, cache: CacheManager, limiter: Limiter):
         super().__init__(config, limiter)
+        self._cache = cache
 
     @rate_limit("5 per minute")
     def get(self, txhash: str) -> dict:
@@ -153,6 +163,11 @@ class TransactionService(Service):
         if not txhash:
             raise BadRequest("Missing txhash parameter")
 
+        tx_result = self._cache.get(txhash, "transaction")
+        if tx_result:
+            print(f"Transaction found in cache: {txhash}")
+            return tx_result
+
         url = f"{self._endpoint}/rawtx/{txhash}"
         print(f"Sending request to {url}")
         data = self.retrieve(url)
@@ -160,7 +175,7 @@ class TransactionService(Service):
         if len(data) == 0:
             raise NotFound(f"Transaction not found: {txhash}")
 
-        return {
+        tx_result = {
             "hash": data["hash"],
             "fee": data["fee"],
             "transaction_index": data["tx_index"],
@@ -180,3 +195,6 @@ class TransactionService(Service):
                 for item in data.get("out", [])
             ],
         }
+
+        self._cache.put(txhash, tx_result, "transaction")
+        return tx_result

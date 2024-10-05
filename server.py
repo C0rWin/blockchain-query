@@ -4,6 +4,7 @@ import traceback
 from config import Config
 from bitcoin_info import AddressService as address_service
 from bitcoin_info import TransactionService as transaction_service
+from db.database import CacheManager
 
 from flask import Flask, request, jsonify
 from flask_cors import CORS
@@ -32,6 +33,9 @@ class ServerApp:
         self._config = config
         self._app = Flask(config["app"]["name"])
         self._limiter = Limiter(app=self._app, key_func=lambda: request.remote_addr)
+
+        db_uri = f"postgresql://{config['database']['user']}:{config['database']['password']}@{config['database']['host']}:{config['database']['port']}/{config['database']['name']}"
+        self._cache = CacheManager(db_uri)
         self._register_routes()
         self._register_error_handlers()
 
@@ -39,13 +43,15 @@ class ServerApp:
         """
         Register the routes for the Flask application.
         """
-        addressView = address_service.as_view("address", self._config, self._limiter)
+        addressView = address_service.as_view(
+            "address", self._config, self._cache, self._limiter
+        )
         self._app.add_url_rule(
             "/address/<string:address>", view_func=addressView, methods=["GET"]
         )
 
         transactionView = transaction_service.as_view(
-            "transaction", self._config, self._limiter
+            "transaction", self._config, self._cache, self._limiter
         )
         self._app.add_url_rule(
             "/transaction/<string:txhash>",
@@ -109,11 +115,13 @@ class ServerApp:
         print(f"Application name: {self._config['app']['name']}")
         print(f"Running on port: {self._config['app']['port']}")
         print(f"Using API Endpoint: {self._config['api']['endpoint']}")
-        CORS(self._app)
+        CORS(self._app, resources={r"/*": {"origins": "*"}})
         for rule in self._app.url_map.iter_rules():
             methods = ",".join(rule.methods)
             line = f"{rule.endpoint:30s} -> {methods:20s} {rule}"
             print(line)
         self._app.run(
-            port=self._config["app"]["port"], debug=self._config["app"]["debug"]
+            port=self._config["app"]["port"],
+            host="0.0.0.0",
+            debug=self._config["app"]["debug"],
         )

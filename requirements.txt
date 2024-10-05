@@ -1,0 +1,8 @@
+Flask==3.0.3
+Flask_Cors==5.0.0
+Flask_Limiter==3.8.0
+PyYAML==6.0
+Requests==2.32.3
+SQLAlchemy==2.0.35
+Werkzeug==3.0.4
+psycopg2==2.9.9
