@@ -70,6 +70,33 @@ class TestBitcoinInfo(unittest.TestCase):
         with self.assertRaises(InternalServerError):
             self.address_service.get("1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa")
 
+    @patch("requests.get")
+    def test_transaction_service_get_success(self, mock_get):
+        mock_response = Mock()
+        mock_response.json.return_value = {
+            "hash": "abc123",
+            "fee": 100,
+            "tx_index": 1,
+            "time": 1630000000,
+            "inputs": [
+                {"address": "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa", "value": 50000}
+            ],
+            "out": [{"address": "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa", "value": 50000}],
+        }
+
+        mock_get.return_value = mock_response
+        self.mock_cache.get.return_value = None
+
+        result = self.transaction_service.get("abc123")
+
+        self.assertEqual(result["hash"], "abc123")
+        self.assertEqual(result["fee"], 100)
+        self.assertEqual(result["transaction_index"], 1)
+        self.assertEqual(result["block_time"], 1630000000)
+        self.assertEqual(len(result["inputs"]), 1)
+        self.assertEqual(len(result["outputs"]), 1)
+        self.mock_cache.put.assert_called_once()
+
 
 if __name__ == "__main__":
     unittest.main()
