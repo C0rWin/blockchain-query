@@ -35,6 +35,8 @@ def handle_response(f):
                 raise NotFound("Resource not found")
             else:
                 raise InternalServerError("Internal server error")
+        except Exception as e:
+            raise InternalServerError("Internal server error")
 
         return data
 
@@ -49,7 +51,7 @@ def rate_limit(limit_string):
             if limiter:
                 limited = limiter.limit(limit_string)(f)
                 return limited(self, *args, **kwargs)
-            return f(*args, **kwargs)
+            return f(self, *args, **kwargs)
 
         return decorated_function
 
